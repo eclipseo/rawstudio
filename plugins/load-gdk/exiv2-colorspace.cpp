@@ -42,6 +42,17 @@ extern "C" {
 /** INTERFACE **/
 
 using namespace Exiv2;
+
+#if EXIV2_TEST_VERSION(0,28,0)
+typedef Exiv2::Error Exiv2Error;
+typedef Image::UniquePtr ImagePtr;
+#define EXIV2_TO_INT toInt64 
+#else
+typedef Exiv2::AnyError Exiv2Error;
+typedef Image::AutoPtr ImagePtr;
+#define EXIV2_TO_INT toLong
+#endif
+
 static void setup_read_icc_profile (j_decompress_ptr cinfo);
 static boolean read_icc_profile (j_decompress_ptr cinfo, JOCTET **icc_data_ptr, unsigned int *icc_data_len);
 
@@ -155,7 +166,7 @@ jpeg_fail:
 #endif
 
 	try {
-		Image::AutoPtr img = ImageFactory::open(filename);
+		ImagePtr img = ImageFactory::open(filename);
 		img->readMetadata();
 		ExifData &exifData = img->exifData();
 		*gamma_guess = 2.2f;
@@ -173,13 +184,13 @@ jpeg_fail:
 			ExifData::const_iterator i;
 			i = exifData.findKey(ExifKey("Exif.Image.BitsPerSample"));
 			if (i != exifData.end())
-				if (i->toLong() == 16)
+				if (i->EXIV2_TO_INT() == 16)
 					*gamma_guess = 1.0f;
 			
 			i = exifData.findKey(ExifKey("Exif.Photo.ColorSpace"));
 			if (i != exifData.end())
 			{
-				if (i->toLong() == 1)
+				if (i->EXIV2_TO_INT() == 1)
 					return rs_color_space_new_singleton("RSSrgb");
 			}
 
@@ -188,12 +199,21 @@ jpeg_fail:
 			if (i != exifData.end())
 			{
 				DataBuf buf(i->size());
+#if EXIV2_TEST_VERSION(0,28,0)
+				i->copy(buf.data(), Exiv2::invalidByteOrder);
+				if (buf.c_str() && buf.size())
+				{
+					RSIccProfile *icc = rs_icc_profile_new_from_memory((gchar*)buf.c_str(), buf.size(), TRUE);
+					return rs_color_space_icc_new_from_icc(icc);
+				}
+#else
 				i->copy(buf.pData_, Exiv2::invalidByteOrder);
 				if (buf.pData_ && buf.size_)
 				{
 					RSIccProfile *icc = rs_icc_profile_new_from_memory((gchar*)buf.pData_, buf.size_, TRUE);
 					return rs_color_space_icc_new_from_icc(icc);
 				}
+#endif
 			}
 
 			i = exifData.findKey(ExifKey("Exif.Iop.InteroperabilityIndex"));
@@ -204,7 +224,7 @@ jpeg_fail:
 					return rs_color_space_new_singleton("RSAdobeRGB");
 				}
 		}
-	} catch (Exiv2::Error& e) {
+	} catch (Exiv2Error& e) {
 		g_debug("Exiv2 ColorSpace Loader:'%s", e.what());
 	}
 	g_debug("Exiv2 ColorSpace Loader: Could not determine colorspace, assume sRGB.");

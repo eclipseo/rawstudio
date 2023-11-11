@@ -33,6 +33,16 @@
 #include <exiv2/convert.hpp>
 #endif
 
+#if EXIV2_TEST_VERSION(0,28,0)
+typedef Exiv2::Error Exiv2Error;
+typedef Exiv2::Image::UniquePtr ImagePtr;
+typedef Exiv2::Value::UniquePtr ValuePtr;
+#else
+typedef Exiv2::AnyError Exiv2Error;
+typedef Exiv2::Image::AutoPtr ImagePtr;
+typedef Exiv2::Value::AutoPtr ValuePtr;
+#endif
+
 extern "C" {
 #include <rawstudio.h>
 #include "config.h"
@@ -128,7 +138,7 @@ rs_exif_load_from_file(const gchar *filename)
 	RS_EXIF_DATA *exif_data;
 	try
 	{
-		Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open(filename);
+		ImagePtr image = Exiv2::ImageFactory::open(filename);
 		assert(image.get() != 0);
 		image->readMetadata();
 
@@ -136,7 +146,7 @@ rs_exif_load_from_file(const gchar *filename)
 
 		exif_data_init(exif_data);
 	}
-	catch (Exiv2::AnyError& e)
+	catch (Exiv2Error& e)
 	{
 		g_warning("Could not load EXIF data from file %s", filename);
 		return NULL;
@@ -151,7 +161,7 @@ rs_exif_load_from_rawfile(RAWFILE *rawfile)
 	RS_EXIF_DATA *rs_exif_data;
 	try
 	{
-		Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open(
+		ImagePtr image = Exiv2::ImageFactory::open(
 			(const Exiv2::byte*) raw_get_map(rawfile), raw_get_filesize(rawfile));
 
 		assert(image.get() != 0);
@@ -161,7 +171,7 @@ rs_exif_load_from_rawfile(RAWFILE *rawfile)
 
 		exif_data_init(rs_exif_data);
 	}
-	catch (Exiv2::AnyError& e)
+	catch (Exiv2Error& e)
 	{
 		g_warning("Could not load EXIF data");
 		return NULL;
@@ -179,7 +189,7 @@ rs_exif_add_to_file(RS_EXIF_DATA *d, Exiv2::IptcData &iptc_data, const gchar *fi
 	try
 	{
 		Exiv2::ExifData *data = (Exiv2::ExifData *) d;
-		Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open(filename);
+		ImagePtr image = Exiv2::ImageFactory::open(filename);
 
 		/* Copy EXIF to XMP */
 #if EXIV2_TEST_VERSION(0,17,0)
@@ -200,7 +210,7 @@ rs_exif_add_to_file(RS_EXIF_DATA *d, Exiv2::IptcData &iptc_data, const gchar *fi
 		image->setIptcData(iptc_data);
 		image->writeMetadata();
 	}
-	catch (Exiv2::AnyError& e)
+	catch (Exiv2Error& e)
 	{
 		g_warning("Couldn't add EXIF data to %s", filename);
 	}
@@ -269,7 +279,7 @@ rs_add_tags_exif(RS_EXIF_DATA *d, const gchar *input_filename)
 
 	glong items_written;
 	gunichar2 *w = g_utf8_to_utf16(xpkeyw->str, -1, NULL, &items_written, NULL);
-	Exiv2::Value::AutoPtr v = Exiv2::Value::create(Exiv2::unsignedByte);
+	ValuePtr v = Exiv2::Value::create(Exiv2::unsignedByte);
 	v->read((const Exiv2::byte*)w, items_written * sizeof(gunichar2), Exiv2::invalidByteOrder);
 	Exiv2::ExifKey key = Exiv2::ExifKey("Exif.Image.XPKeywords");
 	data->add(key, v.get());
